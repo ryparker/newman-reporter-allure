@@ -1,6 +1,6 @@
 {
   "name": "newman-reporter-allure",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "newman reporter for Allure",
   "main": "index.js",
   "scripts": {
@@ -23,6 +23,9 @@
   "license": "ISC",
   "dependencies": {
     "allure-js-commons": "^2.0.0-beta.6",
-    "lodash": "^4.17.15"
+    "lodash": "^4.17.15",
+    "mime-types": "^2.1.26",
+    "pdf-image": "^2.0.0",
+    "pngjs": "^3.4.0"
   }
 }
