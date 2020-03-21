@@ -1,6 +1,6 @@
 {
   "name": "newman-reporter-allure",
-  "version": "1.0.5",
+  "version": "1.0.7",
   "description": "newman reporter for Allure",
   "main": "index.js",
   "scripts": {
@@ -26,6 +26,6 @@
     "lodash": "^4.17.15",
     "mime-types": "^2.1.26",
     "pdf-image": "^2.0.0",
-    "pngjs": "^3.4.0"
+    "uuid": "^7.0.2"
   }
 }

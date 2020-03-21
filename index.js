@@ -3,13 +3,9 @@ const isPromise = require('allure-js-commons').isPromise
 const Status = require('allure-js-commons').Status
 const LabelName = require('allure-js-commons').LabelName
 const Stage = require('allure-js-commons').Allure
-const SupportedContentTypes = require('allure-js-commons').ContentType
 const NewmanAllureInterface = require('./src/NewmanAllureInterface')
 const createHash = require('crypto').createHash
 const _ = require('lodash')
-var PDFImage = require('pdf-image').PDFImage
-// const PNG = require('pngjs').PNG
-const fs = require('fs')
 
 class AllureReporter {
   constructor(emitter, reporterOptions, options) {
@@ -32,9 +28,9 @@ class AllureReporter {
         emitter.on(e, (err, args) => this[e](err, args))
     })
     this.prevRunningTest = ''
-    this.testctr = 1
-    this.pre_req_scrt = ''
-    this.test_scrt = ''
+    this.testCounter = 1
+    this.pre_req_script = ''
+    this.test_script = ''
   }
 
   getInterface() {
@@ -62,70 +58,12 @@ class AllureReporter {
     this.runningTest = test
   }
 
-  async convertPdfToPng(content) {
-    console.log("OOHH boyy we're gunna start cooken a pdf now")
-    const path = `${this.resultsDir}/${this.currItem.name}`
-    try {
-      fs.writeFileSync(`${path}.pdf`, content)
-      let pdfImage = new PDFImage(`${path}.pdf`, {
-        combinedImage: true,
-        graphicsMagick: true,
-        '-quality': '100'
-      })
-      await pdfImage.convertFile()
-      return Buffer.from(`${path}.png`)
-    } catch (error) {
-      console.error(error)
-    }
-  }
-
   writeAttachment(content, type) {
-    // console.debug(`debug mode:\n${type}\n${content}`)
-
-    if (type === 'multipart/form-data') {
-      console.log('smack down! were in the writeAttachment()')
-      // type = 'application/json'
-      type = 'text/plain'
-    }
-
-    if (type === 'application/json') {
-      try {
-        content = this.escape(content)
-        content = JSON.parse(content)
-        content = JSON.stringify(content, undefined, 2)
-      } catch (error) {
-        console.log(error)
-      }
-    }
-
-    if (type === 'image/jpeg') {
-      content = content
-    }
-
-    if (type === 'image/png') {
-      content = content
-    }
-
-    if (type === 'application/pdf') {
-      console.log('hit!')
-      try {
-        content = this.convertPdfToPng(content)
-      } catch (error) {
-        console.log(error)
-      }
-      type = 'image/png'
-    }
-
-    if (type === 'text/html') {
-      type = 'text/plain'
-    }
-
     try {
-      var output = this.runtime.writeAttachment(content, type || 'text/plain')
+      return this.runtime.writeAttachment(content, type)
     } catch (error) {
       console.log(error)
     }
-    return output
   }
 
   pushSuite(suite) {
@@ -150,7 +88,7 @@ class AllureReporter {
       _.isArray(args.executions) &&
       args.executions.length > 1
     )
-      this.pre_req_scrt = args.executions[1].script.exec.join('\n')
+      this.pre_req_script = args.executions[1].script.exec.join('\n')
   }
 
   test(err, args) {
@@ -159,7 +97,7 @@ class AllureReporter {
       _.isArray(args.executions) &&
       args.executions.length > 1
     )
-      this.test_scrt = args.executions[1].script.exec.join('\n')
+      this.test_script = args.executions[1].script.exec.join('\n')
   }
 
   console(err, args) {
@@ -205,7 +143,7 @@ class AllureReporter {
 
     const resp = args.response
     const resp_stream = resp.stream
-    const resp_body = Buffer.from(resp_stream).toString()
+    const resp_body = Buffer.from(resp_stream)
 
     const resp_content_type_header = resp.headers.find(
       o => o.key === 'Content-Type'
@@ -275,13 +213,13 @@ class AllureReporter {
 
     let testFullName = ''
     if (this.prevRunningTest === testName) {
-      this.testctr++
+      this.testCounter++
       this.currentTest = this.currentSuite.startTest(
-        testName + '_setNextRequest_' + this.testctr
+        testName + '_setNextRequest_' + this.testCounter
       )
-      testFullName = this.currItem.name + '_setNextRequest_' + this.testctr
+      testFullName = this.currItem.name + '_setNextRequest_' + this.testCounter
     } else {
-      this.testctr = 1
+      this.testCounter = 1
       this.currentTest = this.currentSuite.startTest(testName)
       this.prevRunningTest = testName
       testFullName = this.currItem.name
@@ -322,7 +260,7 @@ class AllureReporter {
     if (parentSuite !== undefined) {
       parentSuite = parentSuite.charAt(0).toUpperCase() + parentSuite.slice(1)
       this.currentTest.addLabel(LabelName.PARENT_SUITE, parentSuite)
-      this.currentTest.addLabel(LabelName.FEATURE, parentSuite)
+      // this.currentTest.addLabel(LabelName.FEATURE, parentSuite)
     }
     if (suite !== undefined) {
       suite = suite.charAt(0).toUpperCase() + suite.slice(1)
@@ -374,35 +312,33 @@ class AllureReporter {
   attachConsoleLogs() {
     if (this.consoleLogs.length > 0) {
       const buf = Buffer.from(this.consoleLogs.join('\n'), 'utf8')
-      this.getInterface().testAttachment('consoleLogs', buf, 'text/plain')
+      this.getInterface().testAttachment('text/plain', buf, 'ConsoleLogs')
     }
   }
 
   attachPrerequest(pre_req) {
     if (pre_req !== undefined) {
       const buf = Buffer.from(pre_req, 'utf8')
-      this.getInterface().testAttachment('PreRequest', buf, 'text/plain')
+      this.getInterface().testAttachment('text/plain', buf, 'PreRequest')
     }
   }
 
-  attachTestScript(test_scrpt) {
-    if (test_scrpt !== undefined) {
-      const buf = Buffer.from(test_scrpt, 'utf8')
-      this.getInterface().testAttachment('TestScript', buf, 'text/plain')
+  attachTestScript(test_script) {
+    if (test_script !== undefined) {
+      const buf = Buffer.from(test_script, 'utf8')
+      this.getInterface().testAttachment('text/plain', buf, 'TestScript')
     }
   }
 
   attachRequest(request, type) {
     if (request !== undefined) {
-      // const buf = Buffer.from(request, 'utf8')
-      this.getInterface().testAttachment('Request', request, type)
+      this.getInterface().testAttachment(type, request, 'Request')
     }
   }
 
   attachResponse(response, type) {
     if (response !== undefined) {
-      // const buf = Buffer.from(response, 'utf8')
-      this.getInterface().testAttachment('Response', response, type)
+      this.getInterface().testAttachment(type, response, 'Response')
     }
   }
 
@@ -431,7 +367,6 @@ class AllureReporter {
   }
 
   failTestCase(test, error) {
-    console.log(`test: ${test}\nerror: ${error}`)
     if (this.currentTest === null) {
       this.startCase(test)
     } else {
@@ -443,11 +378,13 @@ class AllureReporter {
     }
     const status =
       error.name === 'AssertionError' ? Status.FAILED : Status.BROKEN
-    this.endTest(status, { message: error.message, trace: error.stack })
+    this.endTest(status, {
+      message: error.message,
+      trace: error.stack
+    })
   }
 
   item(err, args) {
-    console.log('item hit')
     if (this.currentTest === null)
       throw new Error('specDone while no test is running')
 
@@ -455,65 +392,34 @@ class AllureReporter {
 
     const requestDataURL =
       this.requestData.method + ' - ' + this.requestData.url
-    // let bodyModeProp = ''
-    // let bodyModePropObj
-
-    // if (this.requestData.body !== undefined) {
-    //   bodyModeProp = this.requestData.body.mode
-    // }
-
-    // if (bodyModeProp === 'raw') {
-    //   bodyModePropObj = this.escape(this.requestData.body[bodyModeProp])
-    // } else {
-    //   bodyModePropObj = ''
-    // }
-
-    // const reqTableStr = ` <table> <tr> <th style="border: 1px solid #dddddd;text-align: left;padding: 8px;color:Orange;"> ${bodyModeProp} </th> <td style="border: 1px solid #dddddd;text-align: left;padding: 8px;"> <pre style="color:Orange"> <b> ${bodyModePropObj} </b> </pre> </td> </tr>  </table>`
 
     const responseCodeStatus =
       this.responseData.code + ' - ' + this.responseData.status
-
-    // var testDescription
-    // if (args.item.request.description !== undefined) {
-    //   testDescription = args.item.request.description.content
-    //   testDescription = testDescription.replace(/[*]/g, '')
-    //   testDescription = testDescription.replace(/\n/g, '<br>')
-    // } else {
-    //   testDescription = ''
-    // }
-
-    // this.setDescriptionHtml(
-    //   `<p style="color:MediumPurple;"> <b> ${testDescription} </b> </p> <h4 style="color:DodgerBlue;"><b><i>Request:</i></b></h4> <p style="color:DodgerBlue"> <b> ${requestDataURL} </b> </p> ${reqTableStr} </p> <h4 style="color:DodgerBlue;"> <b> <i> Response: </i> </b> </h4> <p style="color:DodgerBlue"> <b> ${responseCodeStatus} </b> </p> <p > <pre style="color:Orange;"> <b> ${this.responseData.body} </b> </pre> </p>`
-    // )
 
     this.setDescriptionHtml(
       `<h4><b><i>Request:</i></b></h4><p><b> ${requestDataURL}</b></p></p><h4><b><i>Response:</i></b></h4><p><b> ${responseCodeStatus}</b></p>`
     )
 
-    if (this.pre_req_scrt !== '') {
-      this.attachPrerequest(this.pre_req_scrt)
+    if (this.pre_req_script !== '') {
+      this.attachPrerequest(this.pre_req_script)
     }
 
-    if (this.test_scrt !== '') {
-      this.attachTestScript(this.test_scrt)
+    if (this.test_script !== '') {
+      this.attachTestScript(this.test_script)
     }
 
     if (this.requestData.body !== '' && this.requestData.body !== undefined) {
-      console.log('requestData condition hit')
-      console.log(this.requestData)
       let requestBodyData = this.requestData.body
       const mode = this.requestData.body.mode
       if (mode !== undefined) {
         requestBodyData = this.requestData.body[mode]
       }
-      requestBodyData = this.escape(requestBodyData)
-      console.log(requestBodyData)
+      requestBodyData = requestBodyData
+
       this.attachRequest(requestBodyData, this.requestData.contentType)
     }
 
-    if (this.responseData.body !== '') {
-      console.log('responseData condition hit')
-      console.log(this.responseData)
+    if (this.responseData.body.toString() !== '') {
       this.attachResponse(this.responseData.body, this.responseData.contentType)
     }
 
