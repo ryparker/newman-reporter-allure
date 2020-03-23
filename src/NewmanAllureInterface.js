@@ -85,7 +85,10 @@ class NewmanAllureInterface extends Allure {
         content = content.toString()
         content = this.reporter.escape(content)
 
-        content = content.includes(`":`) ? JSON.parse(content) : content
+        content =
+          content.includes(`":`) && !content.includes(' {{')
+            ? JSON.parse(content)
+            : content
         content = JSON.stringify(content, undefined, 2)
       } catch (error) {
         console.log(error)
