@@ -116,6 +116,9 @@ class AllureReporter {
     const req = args.request
 
     let url = req.url.protocol + '://' + req.url.host.join('.')
+
+    this.currentTest.addLabel(LabelName.HOST, url)
+
     if (req.url.path !== undefined) {
       if (req.url.path.length > 0) {
         url = url + '/' + req.url.path.join('/')
@@ -170,10 +173,14 @@ class AllureReporter {
     const curStep = this.getInterface().startStep(stepName)
 
     if (err) {
+      // console.log('\n\nassertion() err')
+      // console.log(err)
       this.currItem.passed = false
       this.currItem.failedAssertions.push(args.assertion)
       curStep.endStep(Status.FAILED)
     } else {
+      // console.log('\n\nassertion() passed')
+      // console.log(args)
       curStep.endStep(Status.PASSED)
     }
   }
@@ -215,9 +222,9 @@ class AllureReporter {
     if (this.prevRunningTest === testName) {
       this.testCounter++
       this.currentTest = this.currentSuite.startTest(
-        testName + '_setNextRequest_' + this.testCounter
+        testName + '_repeated_' + this.testCounter
       )
-      testFullName = this.currItem.name + '_setNextRequest_' + this.testCounter
+      testFullName = this.currItem.name + '_repeated_' + this.testCounter
     } else {
       this.testCounter = 1
       this.currentTest = this.currentSuite.startTest(testName)
@@ -290,7 +297,9 @@ class AllureReporter {
       }
     }
 
-    if (path !== undefined) this.currentTest.addLabel(LabelName.STORY, path)
+    if (path !== undefined) {
+      this.currentTest.addLabel(LabelName.STORY, path)
+    }
   }
 
   getFullName(item, separator) {
@@ -360,6 +369,8 @@ class AllureReporter {
   }
 
   passTestCase(test) {
+    // console.log('\n\nPassed test:')
+    // console.log(JSON.stringify(test))
     if (this.currentTest === null) {
       this.startCase(test)
     }
@@ -367,6 +378,11 @@ class AllureReporter {
   }
 
   failTestCase(test, error) {
+    // console.log('\n\nFailed test:')
+    // console.log(JSON.stringify(test))
+    // console.log('\nFailed error:')
+    // console.log(JSON.stringify(error))
+
     if (this.currentTest === null) {
       this.startCase(test)
     } else {
@@ -396,8 +412,22 @@ class AllureReporter {
     const responseCodeStatus =
       this.responseData.code + ' - ' + this.responseData.status
 
+    var testDescription
+    if (args.item.request.description !== undefined) {
+      testDescription = args.item.request.description.content
+      testDescription = testDescription.replace(/[*]/g, '')
+      testDescription = testDescription.replace(/\n/g, '<br>')
+    } else {
+      testDescription = ''
+    }
+
+    // Set severity label if description contains it
+    // if(testDescription.includes('severity=')){
+
+    // }
+
     this.setDescriptionHtml(
-      `<h4><b><i>Request:</i></b></h4><p><b> ${requestDataURL}</b></p></p><h4><b><i>Response:</i></b></h4><p><b> ${responseCodeStatus}</b></p>`
+      `<h4 style="color:#2196f3;"><b><i>Request:</i></b></h4><p style="color:#ff9800;"><b> ${requestDataURL}</b></p></p><h4 style="color:#2196f3;"><b><i>Response:</i></b></h4><p style="color:#ff9800;"><b> ${responseCodeStatus}</b></p>`
     )
 
     if (this.pre_req_script !== '') {
@@ -444,6 +474,7 @@ class AllureReporter {
   pushStep(step) {
     this.steps.push(step)
   }
+
   popStep() {
     this.steps.pop()
   }
