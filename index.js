@@ -1,9 +1,13 @@
 const AllureRuntime = require('allure-js-commons').AllureRuntime
-const isPromise = require('allure-js-commons').isPromise
 const Status = require('allure-js-commons').Status
 const LabelName = require('allure-js-commons').LabelName
 const Stage = require('allure-js-commons').Allure
 const NewmanAllureInterface = require('./src/NewmanAllureInterface')
+const AllureEnvironmentFile = require('./src/AllureEnvironmentFile')
+const AllureExecutorFile = require('./src/AllureExecutorFile')
+const AllureLaunchFile = require('./src/AllureLaunchFile')
+const AllurePropertiesFile = require('./src/AllurePropertiesFile')
+
 const createHash = require('crypto').createHash
 const _ = require('lodash')
 
@@ -14,23 +18,24 @@ class AllureReporter {
     this.runningTest = null
     this.currentNMGroup = options.collection
     this.resultsDir = reporterOptions.export || 'allure-results'
-    var config = {
-      resultsDir: this.resultsDir
-    }
-    this.runtime = new AllureRuntime(config)
+    console.log('this.resultsDir', this.resultsDir)
+    this.runtime = new AllureRuntime({
+      resultsDir: this.resultsDir,
+    })
     this.reporterOptions = reporterOptions
     this.options = options
+
     const events = 'start beforeIteration iteration beforeItem item beforePrerequest prerequest beforeScript script beforeRequest request beforeTest test beforeAssertion assertion console exception beforeDone done'.split(
       ' '
     )
-    events.forEach(e => {
-      if (typeof this[e] == 'function')
-        emitter.on(e, (err, args) => this[e](err, args))
+    events.forEach((e) => {
+      if (typeof this[e] == 'function') emitter.on(e, (err, args) => this[e](err, args))
     })
     this.prevRunningTest = ''
     this.testCounter = 1
     this.pre_req_script = ''
     this.test_script = ''
+    this.testRunName = ''
   }
 
   getInterface() {
@@ -58,6 +63,24 @@ class AllureReporter {
     this.runningTest = test
   }
 
+  createAllureFiles() {
+    if (this.options.environment) {
+      AllureEnvironmentFile.create(this.resultsDir, this.options.environment)
+    }
+
+    if (this.reporterOptions.executor) {
+      AllureExecutorFile.create(this.resultsDir, this.reporterOptions.executor)
+    }
+
+    if (this.currentSuite.suiteName) {
+      AllureLaunchFile.create(this.resultsDir, this.currentSuite.suiteName)
+    }
+
+    if (this.reporterOptions.jiraUrl) {
+      AllurePropertiesFile.create(this.resultsDir, this.reporterOptions.jiraUrl)
+    }
+  }
+
   writeAttachment(content, type) {
     try {
       return this.runtime.writeAttachment(content, type)
@@ -75,29 +98,29 @@ class AllureReporter {
   }
 
   start(err, args) {
-    const suiteName = this.options.collection.name
+    const suiteName = this.options.folder || this.options.collection.name
     console.log(`### Starting Execution For - ${suiteName} ###`)
+    this.testRunName = suiteName
+
     const scope = this.currentSuite || this.runtime
+
     const suite = scope.startGroup(suiteName || 'Global')
+
     this.pushSuite(suite)
   }
 
   prerequest(err, args) {
-    if (
-      args.executions != undefined &&
-      _.isArray(args.executions) &&
-      args.executions.length > 1
-    )
-      this.pre_req_script = args.executions[1].script.exec.join('\n')
+    if (args.executions != undefined && _.isArray(args.executions) && args.executions.length > 1) {
+      const lastExecutionIndex = args.executions.length - 1
+      this.pre_req_script = args.executions[lastExecutionIndex].script.exec.join('\n')
+    }
   }
 
   test(err, args) {
-    if (
-      args.executions != undefined &&
-      _.isArray(args.executions) &&
-      args.executions.length > 1
-    )
-      this.test_script = args.executions[1].script.exec.join('\n')
+    if (args.executions != undefined && _.isArray(args.executions) && args.executions.length > 1) {
+      const lastExecutionIndex = args.executions.length - 1
+      this.test_script = args.executions[lastExecutionIndex].script.exec.join('\n')
+    }
   }
 
   console(err, args) {
@@ -115,9 +138,13 @@ class AllureReporter {
 
     const req = args.request
 
+    // TODO: Add headers to description
+    // console.log(`request() - look for headers:\n${args}`)
+
     let url = req.url.protocol + '://' + req.url.host.join('.')
 
     this.currentTest.addLabel(LabelName.HOST, url)
+    this.currentTest.addLabel(LabelName.THREAD, this.currentSuite.name)
 
     if (req.url.path !== undefined) {
       if (req.url.path.length > 0) {
@@ -125,9 +152,7 @@ class AllureReporter {
       }
     }
 
-    const req_content_type_header = req.headers.find(
-      o => o.key === 'Content-Type'
-    )
+    const req_content_type_header = req.headers.find((o) => o.key === 'Content-Type')
 
     let reqType = ''
     if (req_content_type_header) {
@@ -141,16 +166,14 @@ class AllureReporter {
       url: url,
       method: req.method,
       contentType: reqType,
-      body: req.body
+      body: req.body,
     }
 
     const resp = args.response
     const resp_stream = resp.stream
     const resp_body = Buffer.from(resp_stream)
 
-    const resp_content_type_header = resp.headers.find(
-      o => o.key === 'Content-Type'
-    )
+    const resp_content_type_header = resp.headers.find((o) => o.key === 'Content-Type')
 
     let respType = ''
     if (resp_content_type_header) {
@@ -164,7 +187,7 @@ class AllureReporter {
       status: resp.status,
       code: resp.code,
       contentType: respType,
-      body: resp_body
+      body: resp_body,
     }
   }
 
@@ -189,21 +212,25 @@ class AllureReporter {
     if (this.runningTest !== null) {
       console.error('Allure reporter issue: running test on suiteDone')
     }
+
     if (this.currentSuite !== null) {
+      this.createAllureFiles()
+
       if (this.currentStep !== null) {
         this.currentStep.endStep()
       }
+
       this.currentSuite.endGroup()
       this.popSuite()
     }
-    console.log(`#### Finished Execution ####`)
+    console.log(`#### Finished Execution of ${this.testRunName} ####`)
   }
 
   beforeItem(err, args) {
     this.currItem = {
       name: this.itemName(args.item, args.cursor),
       passed: true,
-      failedAssertions: []
+      failedAssertions: [],
     }
     this.consoleLogs = []
 
@@ -212,6 +239,7 @@ class AllureReporter {
     }
 
     var testName = this.currItem.name
+    // console.log(testName)
 
     if (testName.indexOf('/') > 0) {
       const len = testName.split('/').length
@@ -221,9 +249,7 @@ class AllureReporter {
     let testFullName = ''
     if (this.prevRunningTest === testName) {
       this.testCounter++
-      this.currentTest = this.currentSuite.startTest(
-        testName + '_repeated_' + this.testCounter
-      )
+      this.currentTest = this.currentSuite.startTest(testName + '_repeated_' + this.testCounter)
       testFullName = this.currItem.name + '_repeated_' + this.testCounter
     } else {
       this.testCounter = 1
@@ -232,9 +258,7 @@ class AllureReporter {
       testFullName = this.currItem.name
     }
 
-    this.currentTest.historyId = createHash('md5')
-      .update(testFullName)
-      .digest('hex')
+    this.currentTest.historyId = createHash('md5').update(testFullName).digest('hex')
 
     this.currentTest.stage = Stage.RUNNING
 
@@ -279,14 +303,9 @@ class AllureReporter {
         let captalizedSubSuites = []
 
         for (var i = 0; i < subSuites.length; i++) {
-          captalizedSubSuites.push(
-            subSuites[i].charAt(0).toUpperCase() + subSuites[i].slice(1)
-          )
+          captalizedSubSuites.push(subSuites[i].charAt(0).toUpperCase() + subSuites[i].slice(1))
         }
-        this.currentTest.addLabel(
-          LabelName.SUB_SUITE,
-          captalizedSubSuites.join(' > ')
-        )
+        this.currentTest.addLabel(LabelName.SUB_SUITE, captalizedSubSuites.join(' > '))
       }
     }
 
@@ -303,18 +322,17 @@ class AllureReporter {
   }
 
   getFullName(item, separator) {
-    if (
-      _.isEmpty(item) ||
-      !_.isFunction(item.parent) ||
-      !_.isFunction(item.forEachParent)
-    ) {
+    if (_.isEmpty(item) || !_.isFunction(item.parent) || !_.isFunction(item.forEachParent)) {
       return
     }
     var chain = []
-    item.forEachParent(function(parent) {
+    item.forEachParent(function (parent) {
       chain.unshift(parent.name || parent.id)
     })
-    item.parent() && chain.push(item.name || item.id) // Add the current item only if it is not the collection
+
+    // Add the current item only if it is not the collection
+    item.parent() && chain.push(item.name || item.id)
+
     return chain.join(_.isString(separator) ? separator : '/')
   }
 
@@ -392,25 +410,21 @@ class AllureReporter {
         return
       }
     }
-    const status =
-      error.name === 'AssertionError' ? Status.FAILED : Status.BROKEN
+    const status = error.name === 'AssertionError' ? Status.FAILED : Status.BROKEN
     this.endTest(status, {
       message: error.message,
-      trace: error.stack
+      trace: error.stack,
     })
   }
 
   item(err, args) {
-    if (this.currentTest === null)
-      throw new Error('specDone while no test is running')
+    if (this.currentTest === null) throw new Error('specDone while no test is running')
 
     this.attachConsoleLogs()
 
-    const requestDataURL =
-      this.requestData.method + ' - ' + this.requestData.url
+    const requestDataURL = this.requestData.method + ' - ' + this.requestData.url
 
-    const responseCodeStatus =
-      this.responseData.code + ' - ' + this.responseData.status
+    const responseCodeStatus = this.responseData.code + ' - ' + this.responseData.status
 
     var testDescription
     if (args.item.request.description !== undefined) {
@@ -455,14 +469,12 @@ class AllureReporter {
 
     if (this.currItem.failedAssertions.length > 0) {
       const msg = this.escape(this.currItem.failedAssertions.join(', '))
-      const details = this.escape(
-        `Response code: ${this.responseData.code}, status: ${this.responseData.status}`
-      )
+      const details = this.escape(`Response code: ${this.responseData.code}, status: ${this.responseData.status}`)
 
       this.failTestCase(this.currentTest, {
         name: 'AssertionError',
         message: msg || details,
-        trace: this.responseData.body
+        trace: this.responseData.body,
       })
     } else {
       this.passTestCase()
@@ -492,14 +504,8 @@ class AllureReporter {
   }
 
   itemName(item, cursor) {
-    const parentName =
-      item.parent && item.parent() && item.parent().name
-        ? item.parent().name
-        : ''
-    const folderOrEmpty =
-      !parentName || parentName === this.options.collection.name
-        ? ''
-        : parentName + '/'
+    const parentName = item.parent && item.parent() && item.parent().name ? item.parent().name : ''
+    const folderOrEmpty = !parentName || parentName === this.options.collection.name ? '' : parentName + '/'
     const iteration = cursor && cursor.cycles > 1 ? '/' + cursor.iteration : ''
     return this.escape(folderOrEmpty + item.name + iteration)
   }
@@ -509,14 +515,7 @@ class AllureReporter {
       .replace('\n', '')
       .replace('\r', '')
       .replace('"', '"')
-      .replace(
-        /[\u0100-\uffff]/g,
-        c =>
-          `|0x${c
-            .charCodeAt(0)
-            .toString(16)
-            .padStart(4, '0')}`
-      )
+      .replace(/[\u0100-\uffff]/g, (c) => `|0x${c.charCodeAt(0).toString(16).padStart(4, '0')}`)
   }
 }
 

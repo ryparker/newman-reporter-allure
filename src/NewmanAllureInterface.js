@@ -30,11 +30,11 @@ class NewmanAllureInterface extends Allure {
     if (isPromise(result)) {
       const promise = result
       return promise
-        .then(a => {
+        .then((a) => {
           WrappedStep.endStep()
           return a
         })
-        .catch(e => {
+        .catch((e) => {
           WrappedStep.endStep()
           throw e
         })
@@ -68,7 +68,7 @@ class NewmanAllureInterface extends Allure {
       var pdfImage = new PDFImage(`${path}.pdf`, {
         combinedImage: true,
         graphicsMagick: true,
-        '-quality': '100'
+        '-quality': '100',
       })
 
       await pdfImage.convertFile()
@@ -79,28 +79,25 @@ class NewmanAllureInterface extends Allure {
 
   createAttachmentFile(type, content) {
     var file = ''
+    // console.log(`type: ${type}`)
 
     if (type === 'application/json') {
       try {
         content = content.toString()
         content = this.reporter.escape(content)
 
-        content =
-          content.includes(`":`) && !content.includes(' {{')
-            ? JSON.parse(content)
-            : content
+        content = content.includes(`":`) && !content.includes('{{') ? JSON.parse(content) : content
         content = JSON.stringify(content, undefined, 2)
       } catch (error) {
-        console.log(error)
+        console.log('content', content)
+        console.log('Error in NewmanAllureInterface.createAttachmentFile()', error)
       }
     }
 
     if (type === 'multipart/form-data') {
       type = 'application/json'
       try {
-        content = content.PostmanPropertyList
-          ? content.PostmanPropertyList.members
-          : content
+        content = content.PostmanPropertyList ? content.PostmanPropertyList.members : content
         content = JSON.stringify(content)
       } catch (error) {
         console.log(error)
@@ -117,6 +114,10 @@ class NewmanAllureInterface extends Allure {
     if (type === 'text/html') {
       content = content.toString()
       type = 'text/plain'
+    }
+
+    if (type === 'text/xml') {
+      type = 'application/xml'
     }
 
     if (file === '') {
